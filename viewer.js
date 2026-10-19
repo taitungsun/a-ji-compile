@@ -145,7 +145,8 @@ function formatInline(str) {
     .replace(/(?<!\*)\*([^*\r\n]+?)\*(?!\*)/g, "<em>$1</em>");
 }
 
-function markdownToHtmlFragment(md) {
+// sourceParas：原文段落；遇到「[P3] 譯文」這種行，先放第 3 段原文，再放譯文
+function markdownToHtmlFragment(md, sourceParas = []) {
   const lines = String(md || "").split(/\r?\n/);
   let out = [];
   let inList = false;
@@ -204,6 +205,19 @@ function markdownToHtmlFragment(md) {
     if (!line) {
       flushQuote();
       flushList();
+      continue;
+    }
+    const refMatch = line.match(/^\[P(\d+)\]\s*(.*)$/);
+    if (refMatch && sourceParas[refMatch[1] - 1] !== undefined) {
+      flushQuote();
+      flushList();
+      out.push(`<blockquote><p>${escapeHtml(sourceParas[refMatch[1] - 1])}</p></blockquote>`);
+      if (refMatch[2]) {
+        out.push(`<p class="bilingual-zh">${formatInline(refMatch[2])}</p>`);
+        afterQuote = false;
+      } else {
+        afterQuote = true; // 譯文寫在下一行
+      }
       continue;
     }
     if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) {
@@ -291,12 +305,12 @@ function splitGuide(md) {
   };
 }
 
-function renderArticleBody(md) {
+function renderArticleBody(md, sourceParas = []) {
   const { guideMd, restMd } = splitGuide(md);
   const guideHtml = guideMd
     ? `<section class="guide">\n<h2>核心導讀</h2>\n${markdownToHtmlFragment(guideMd)}\n</section>\n`
     : "";
-  return guideHtml + markdownToHtmlFragment(restMd);
+  return guideHtml + markdownToHtmlFragment(restMd, sourceParas);
 }
 
 // 頁尾：作者與編譯資訊（參考 SEAM 的頁尾）；viewer 與另存的 HTML 共用
@@ -507,7 +521,7 @@ const SYSTEM_INSTRUCTION = `【一、你的任務】
 ## 核心導讀
 用國、高中生聽得懂的話，一句話說明這篇文章在講什麼；再列出 3 個重點，以及讀懂本文需要的背景知識（沒有則省略）；最後提出 2 個可以讓學生思考或討論的問題。
 ## 1. 全文雙語對照
-完整翻譯全文，嚴禁刪減。每段先放英文原文（用 > 引用格式），下一段緊接流暢、國、高中生讀得懂的台灣繁體中文譯文。
+文章的每一段前面都有段落編號，例如 [P1]、[P2]。依序翻譯每一段，不可省略、合併或拆開。每段譯文自成一行，開頭寫上和原文相同的編號，例如「[P1] 譯文」。不要重抄英文原文，程式會自動把原文放在譯文上面。譯文要流暢，國、高中生讀得懂的台灣繁體中文。
 ## 2. 補充說明
 挑出文中 2 到 3 處學生可能看不懂的地方（文化背景、典故、慣用語、幽默或反諷、標題雙關語），用簡單易懂的方式說明。每一點自成一段，依序用 (1)、(2)、(3) 開頭。
 ## 3. 重點單字與片語
@@ -541,12 +555,23 @@ const SYSTEM_INSTRUCTION = `【一、你的任務】
 左邊是不要用的寫法，右邊是台灣的寫法：
 ${TW_TERMS.map(([cn, tw, note]) => `${cn} → ${tw}${note ? `（${note}）` : ""}`).join("\n")}`;
 
-function buildPrompt(articleText, rawTitle) {
+// 擷取到的文章以空行分段；送出時每段加上 [P1]、[P2]…，模型只回譯文，原文由程式放回
+function splitParagraphs(articleText) {
+  return String(articleText || "")
+    .split(/\n\s*\n+/)
+    .map(p => p.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function buildPrompt(paragraphs, rawTitle) {
   return `原文標題：${rawTitle}
 
-【以下為待編譯文章內容】：
-${articleText}`;
+【以下為待編譯文章內容，每段前面是段落編號】：
+${paragraphs.map((p, i) => `[P${i + 1}] ${p}`).join("\n\n")}`;
 }
+
+// 模型以版權為由中途改口拒絕時，譯文裡會出現這類句子
+const REFUSAL_PATTERN = /(無法|不能|不便).{0,40}(版權|著作權)|(版權|著作權).{0,40}(無法|不能|不便)/;
 
 function downloadBlob(content, filename, mimeType) {
   return new Promise(resolve => {
@@ -604,6 +629,7 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
   let buf = "";
   let finished = false;
   let truncated = false;
+  let blocked = ""; // 因版權（RECITATION）、安全等原因被 Gemini 中止時的 finishReason
 
   const parseLine = line => {
     if (!line.startsWith("data:")) return;
@@ -615,12 +641,17 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
     try {
       const data = JSON.parse(jsonStr);
       if (data?.usageMetadata) onUsage(data.usageMetadata);
+      if (data?.promptFeedback?.blockReason) {
+        blocked = data.promptFeedback.blockReason;
+        finished = true;
+      }
       const cand = data?.candidates?.[0];
       const text = cand?.content?.parts?.map(p => p.text || "").join("") || "";
       if (text) onChunk(text);
       if (cand?.finishReason) {
         finished = true;
         if (cand.finishReason === "MAX_TOKENS") truncated = true;
+        else if (cand.finishReason !== "STOP") blocked = cand.finishReason;
       }
     } catch (_) {}
   };
@@ -650,7 +681,7 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
   if (buf.trim()) {
     for (const line of buf.split(/\r?\n/)) parseLine(line);
   }
-  return { truncated };
+  return { truncated, blocked };
 }
 
 (async function initViewer() {
@@ -739,7 +770,8 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
     return;
   }
 
-  const prompt = buildPrompt(job.articleText, rawTitle);
+  const sourceParas = splitParagraphs(job.articleText);
+  const prompt = buildPrompt(sourceParas, rawTitle);
   let fullMd = "";
 
   // 串流時每個畫格最多重繪一次，避免長文每收到一小段就整篇重新排版而卡頓
@@ -753,7 +785,7 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
       if (streamingDone) return;
       const parsed = extractZhTitleAndBody(fullMd, "正在翻譯中文大標題...");
       pageHeading.textContent = parsed.zhTitle;
-      renderedContent.innerHTML = renderArticleBody(parsed.bodyMd);
+      renderedContent.innerHTML = renderArticleBody(parsed.bodyMd, sourceParas);
     });
   };
 
@@ -786,12 +818,14 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
   try {
     let finalMd;
     let incomplete = false;
+    let incompleteReason = "";
 
     let usageInfo = null;
 
     if (cachedResult) {
       finalMd = cachedResult.finalMd;
       incomplete = !!cachedResult.incomplete;
+      incompleteReason = cachedResult.incompleteReason || "";
       usageInfo = cachedResult.usageInfo || null;
     } else {
       statusBanner.textContent = `⏳ 正在透過 Gemini (${store.model}) 翻譯 "${displaySite}" 的文章（共 ${job.articleText.length} 字元），請稍候...`;
@@ -799,9 +833,11 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
       // 第一次呼叫；若因連線中斷或達到模型輸出上限而停止，自動接續（最多 MAX_CONTINUATIONS 次）
       let cut = false;
       let cutReason = "";
+      let blocked = "";
       try {
         const r = await runStream(prompt);
         cut = !!r?.truncated;
+        blocked = r?.blocked || "";
         cutReason = "已達模型單次輸出上限";
       } catch (streamErr) {
         if (fullMd.trim().length <= 150) throw streamErr;
@@ -817,6 +853,7 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
         try {
           const r = await runStream(contPrompt);
           cut = !!r?.truncated;
+          blocked = r?.blocked || "";
           cutReason = "已達模型單次輸出上限";
         } catch (_) {
           cut = fullMd.length > lengthBefore; // 有進展才再試一次
@@ -828,9 +865,20 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
       if (!finalMd) {
         throw new Error("未收到模型回傳內容");
       }
-      incomplete = cut || !finalMd.includes(FINAL_SECTION);
+      const translatedRefs = new Set([...finalMd.matchAll(/^\s*\[P(\d+)\]/gm)].map(m => m[1])).size;
+      const missingParas = finalMd.includes("[P") ? sourceParas.length - translatedRefs : 0;
+      if (blocked) {
+        incompleteReason = `Gemini 以「${blocked === "RECITATION" ? "內容與原文重複（版權）" : blocked}」為由中途停止輸出。可以再編譯一次，或先選取一部分段落再按右鍵編譯。`;
+      } else if (REFUSAL_PATTERN.test(finalMd)) {
+        incompleteReason = "Gemini 中途以版權為由拒絕繼續翻譯，後面的內容可能只有摘要。可以再編譯一次，或先選取一部分段落再按右鍵編譯。";
+      } else if (cut || !finalMd.includes(FINAL_SECTION)) {
+        incompleteReason = `內容可能不完整（未偵測到「${FINAL_SECTION}」或輸出仍被截斷），建議重新右鍵編譯或改用輸出上限較高的模型。`;
+      } else if (missingParas > 0) {
+        incompleteReason = `全文雙語對照少翻了 ${missingParas} 段，建議重新右鍵編譯。`;
+      }
+      incomplete = !!incompleteReason;
       usageInfo = { usage, usageMissing, model: store.model };
-      sessionSet(resultKey, { finalMd, incomplete, usageInfo });
+      sessionSet(resultKey, { finalMd, incomplete, incompleteReason, usageInfo });
     }
 
     const usageNote = usageInfo ? formatUsageNote(usageInfo, now) : "";
@@ -844,7 +892,7 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
     pageHeading.textContent = parsedFinal.zhTitle;
     const webPageTitle = `${parsedFinal.zhTitle} - ${displaySite}`;
     document.title = webPageTitle;
-    const finalHtmlFragment = renderArticleBody(parsedFinal.bodyMd);
+    const finalHtmlFragment = renderArticleBody(parsedFinal.bodyMd, sourceParas);
     renderedContent.innerHTML = finalHtmlFragment;
     if (window.addSpeakButtons) addSpeakButtons(renderedContent);
 
@@ -878,7 +926,7 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
     };
 
     const incompleteNote = incomplete
-      ? `⚠️ 內容可能不完整（未偵測到「${FINAL_SECTION}」或輸出仍被截斷），建議重新右鍵編譯或改用輸出上限較高的模型。`
+      ? `⚠️ ${incompleteReason || `內容可能不完整（未偵測到「${FINAL_SECTION}」或輸出仍被截斷），建議重新右鍵編譯或改用輸出上限較高的模型。`}`
       : "";
 
     if (cachedResult) {
