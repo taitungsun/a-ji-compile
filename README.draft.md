@@ -2,9 +2,9 @@
 
 # 阿吉編譯
 
-**A-Ji Compile · v2.7**
+**A-Ji Compile · v2.8**
 
-[![Version](https://img.shields.io/badge/version-2.7-blue)](../../releases/latest)
+[![Version](https://img.shields.io/badge/version-2.8-blue)](../../releases/latest)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey)](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hant)
 [![Platform](https://img.shields.io/badge/Platform-Chrome%20%7C%20Brave%20%7C%20Edge-blue)](#技術說明)
 [![Ko-fi](https://img.shields.io/badge/Support-Ko--fi-FF5E5B?logo=ko-fi)](https://ko-fi.com/izensun)
@@ -31,6 +31,7 @@
 其他功能：
 
 - 可切換僅看中文、僅看英文、深淺色與字級
+- 每段英文原文與單字例句旁有「朗讀」按鈕，用瀏覽器內建的英文語音唸出來，另存的 HTML 檔與 iPhone、iPad 的 Safari 也能用
 - 完成後自動另存成單一 HTML 檔，可離線開啟、列印或傳給學生
 - 先選取一段文字再按右鍵，只編譯選取的部分
 - 快捷鍵 Alt+J
