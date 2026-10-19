@@ -1,0 +1,28 @@
+阿吉編譯（A-Ji Compile）
+Copyright (c) 2026 @izensun
+
+本作品採用創用 CC 姓名標示-非商業性-相同方式分享 4.0 國際授權條款授權。
+This work is licensed under the Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0).
+
+授權摘要（中文）：https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hant
+Human-readable summary: https://creativecommons.org/licenses/by-nc-sa/4.0/
+Full legal code: https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
+
+您可以自由：
+  - 分享：以任何媒介或格式重製及散布本作品
+  - 改作：重混、轉換本作品，及依本作品建立新作品
+
+惟須遵守下列條件：
+  - 姓名標示：必須標示作者姓名、提供授權條款連結，並註明是否有修改。
+  - 非商業性：不得將本作品用於商業目的。
+  - 相同方式分享：若重混、轉換或依本作品建立新作品，須以相同授權條款散布您的貢獻。
+
+You are free to share and adapt this work under the terms above.
+This file is a notice; the license itself is the legal code at the URL above.
+
+
+Third-party component:
+  Mozilla Readability 0.6.0 (https://github.com/mozilla/readability) is included as
+  lib/Readability.js and is distributed under its own license (Apache License 2.0,
+  see lib/Readability.LICENSE.md).

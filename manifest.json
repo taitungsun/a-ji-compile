@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "阿吉編譯",
+  "version": "2.7.1",
+  "description": "在網頁按右鍵自動擷取文章正文，透過 Gemini API 編譯成台灣繁體中文雙語文章與學習筆記。",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "阿吉編譯 — 點擊設定 Gemini API",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "permissions": [
+    "contextMenus",
+    "scripting",
+    "activeTab",
+    "storage",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "commands": {
+    "compile-article": {
+      "description": "編譯成中英雙語講義",
+      "suggested_key": {
+        "default": "Alt+J",
+        "mac": "Alt+J"
+      }
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
