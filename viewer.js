@@ -712,7 +712,7 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
   if (cleanTitle.length > 80) cleanTitle = cleanTitle.slice(0, 80).replace(/_+$/g, "");
   if (!cleanTitle) cleanTitle = "Article";
 
-  const baseFileName = `${cleanTitle}_${cleanSite}_${dateYmd}`;
+  const baseFileName = `${cleanTitle}_${cleanSite}`;
   const webPageTitle = `${cleanSite}_${dateYmd}`;
   const safeSubfolder = String((store.saveFolder === "阿吉雙語編譯" ? "" : store.saveFolder) || "阿吉編譯")
     .trim()
