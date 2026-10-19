@@ -211,6 +211,7 @@ function markdownToHtmlFragment(md, sourceParas = []) {
     if (refMatch && sourceParas[refMatch[1] - 1] !== undefined) {
       flushQuote();
       flushList();
+      if (/^[（(]?略[）)]?$/.test(refMatch[2])) continue; // 模型判斷不是內文（選單、廣告等）
       out.push(`<blockquote><p>${escapeHtml(sourceParas[refMatch[1] - 1])}</p></blockquote>`);
       if (refMatch[2]) {
         out.push(`<p class="bilingual-zh">${formatInline(refMatch[2])}</p>`);
@@ -516,12 +517,12 @@ const SYSTEM_INSTRUCTION = `【一、你的任務】
 你是台灣的國、高中英文老師，要把學生感興趣的英文文章做成雙語學習講義。讀者是國、高中生，所以譯文要讓他們一讀就懂，筆記要幫他們真的學到東西。
 
 【二、講義格式】
-只輸出講義本身（Markdown），開頭不要寒暄，結尾不要總結或詢問。文章裡混進來的網站選單、廣告、訂閱提示都略過不譯。
+只輸出講義本身（Markdown），開頭不要寒暄，結尾不要總結或詢問。
 第一行寫「# 中文大標題」：把使用者提供的原文標題譯成通順的台灣中文。接著依序寫下面四個區塊，區塊標題用 ## 開頭，一字不改照抄：
 ## 核心導讀
 用國、高中生聽得懂的話，一句話說明這篇文章在講什麼；再列出 3 個重點，以及讀懂本文需要的背景知識（沒有則省略）；最後提出 2 個可以讓學生思考或討論的問題。
 ## 1. 全文雙語對照
-文章的每一段前面都有段落編號，例如 [P1]、[P2]。依序翻譯每一段，不可省略、合併或拆開。每段譯文自成一行，開頭寫上和原文相同的編號，例如「[P1] 譯文」。不要重抄英文原文，程式會自動把原文放在譯文上面。譯文要流暢，國、高中生讀得懂的台灣繁體中文。
+文章的每一段前面都有段落編號，例如 [P1]、[P2]。依序翻譯每一段，不可省略、合併或拆開。每段譯文自成一行，開頭寫上和原文相同的編號，例如「[P1] 譯文」。混進文章裡的網站選單、廣告、訂閱或分享提示這類不是內文的段落，只寫「[P5] 略」（換成該段的編號），講義上就不會出現那一段。不要重抄英文原文，程式會自動把原文放在譯文上面。譯文要流暢，國、高中生讀得懂的台灣繁體中文。
 ## 2. 補充說明
 挑出文中 2 到 3 處學生可能看不懂的地方（文化背景、典故、慣用語、幽默或反諷、標題雙關語），用簡單易懂的方式說明。每一點自成一段，依序用 (1)、(2)、(3) 開頭。
 ## 3. 重點單字與片語
@@ -865,8 +866,11 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
       if (!finalMd) {
         throw new Error("未收到模型回傳內容");
       }
-      const translatedRefs = new Set([...finalMd.matchAll(/^\s*\[P(\d+)\]/gm)].map(m => m[1])).size;
-      const missingParas = finalMd.includes("[P") ? sourceParas.length - translatedRefs : 0;
+      // 漏翻：只算沒有出現編號、且長度像內文（60 字元以上）的段落，短的多半是網站雜訊
+      const seenRefs = new Set([...finalMd.matchAll(/^\s*\[P(\d+)\]/gm)].map(m => Number(m[1])));
+      const missingParas = seenRefs.size
+        ? sourceParas.filter((p, i) => !seenRefs.has(i + 1) && p.length >= 60).length
+        : 0;
       if (blocked) {
         incompleteReason = `Gemini 以「${blocked === "RECITATION" ? "內容與原文重複（版權）" : blocked}」為由中途停止輸出。可以再編譯一次，或先選取一部分段落再按右鍵編譯。`;
       } else if (REFUSAL_PATTERN.test(finalMd)) {
