@@ -698,7 +698,6 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
 
   const now = new Date(job.createdAt || Date.now());
   const pad = n => String(n).padStart(2, "0");
-  const dateYmd = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
   const dateTimeStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
   const rawTitle = (job.articleTitle || "Article").trim();
@@ -713,13 +712,13 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
   if (!cleanTitle) cleanTitle = "Article";
 
   const baseFileName = `${cleanTitle}_${cleanSite}`;
-  const webPageTitle = `${cleanSite}_${dateYmd}`;
   const safeSubfolder = String((store.saveFolder === "阿吉雙語編譯" ? "" : store.saveFolder) || "阿吉編譯")
     .trim()
     .replace(/[\\/:*?"<>|]+/g, "");
   const folderPrefix = safeSubfolder ? `${safeSubfolder}/` : "";
 
-  document.title = webPageTitle;
+  // 分頁標題：翻譯完成前先用英文原標題，完成後換成「中文標題 - 網站名稱」
+  document.title = `${rawTitle} - ${displaySite}`;
   pageHeading.textContent = "正在翻譯中文大標題...";
   articleSubtitle.textContent = rawTitle;
   badgeSite.textContent = displaySite;
@@ -843,6 +842,8 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
     streamingDone = true;
     const parsedFinal = extractZhTitleAndBody(finalMd, rawTitle);
     pageHeading.textContent = parsedFinal.zhTitle;
+    const webPageTitle = `${parsedFinal.zhTitle} - ${displaySite}`;
+    document.title = webPageTitle;
     const finalHtmlFragment = renderArticleBody(parsedFinal.bodyMd);
     renderedContent.innerHTML = finalHtmlFragment;
     if (window.addSpeakButtons) addSpeakButtons(renderedContent);
