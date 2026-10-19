@@ -182,7 +182,29 @@
     color: var(--text-muted);
   }
   @media print {
-    .status-banner, .usage-note { display: none !important; }
+    .status-banner, .usage-note, .speak-btn { display: none !important; }
+  }
+  .speak-btn {
+    display: inline-block;
+    margin: 8px 0 0;
+    padding: 1px 9px;
+    cursor: pointer;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-muted);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+  }
+  .speak-btn:hover,
+  .speak-btn.speaking {
+    color: var(--text-main);
+    border-color: var(--accent);
+  }
+  p.en-line .speak-btn {
+    margin: 0 0 0 8px;
+    vertical-align: 1px;
   }
   h1 {
     font-size: 1.55em;

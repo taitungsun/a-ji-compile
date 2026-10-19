@@ -25,7 +25,59 @@ function installReaderPrefs() {
 }
 const READER_PREFS_SCRIPT = `    ${installReaderPrefs.toString()}\n    installReaderPrefs();`;
 
+// 英文段落與例句旁的「朗讀」按鈕，用瀏覽器內建語音（iPhone Safari 也能用）；同樣會嵌入另存的 HTML 檔
+function installReadAloud() {
+  var synth = window.speechSynthesis;
+  if (!synth || typeof SpeechSynthesisUtterance !== "function") return;
+  var LABEL_PLAY = "▶︎ 朗讀", LABEL_STOP = "■ 停止";
+  var current = null;
+  function reset() {
+    if (!current) return;
+    current.textContent = LABEL_PLAY;
+    current.classList.remove("speaking");
+    current = null;
+  }
+  function speak(btn, text) {
+    var again = current === btn;
+    synth.cancel();
+    reset();
+    if (again) return; // 再按一次 = 停止
+    // 逐句排入佇列：Chrome 的語音遇到太長的一段常會唸到一半就停
+    var parts = text.match(/[^.!?]+[.!?]+["'”’)]*\s*|[^.!?]+$/g) || [text];
+    current = btn;
+    btn.textContent = LABEL_STOP;
+    btn.classList.add("speaking");
+    // Safari 在 cancel() 之後立刻 speak() 有時會沒聲音，稍等一下再開始
+    setTimeout(function () {
+      parts.forEach(function (s, i) {
+        var u = new SpeechSynthesisUtterance(s.trim());
+        u.lang = "en-US";
+        u.rate = 0.9;
+        if (i === parts.length - 1) u.onend = function () { if (current === btn) reset(); };
+        u.onerror = function () { if (current === btn) reset(); };
+        synth.speak(u);
+      });
+    }, 60);
+  }
+  window.addSpeakButtons = function (root) {
+    (root || document).querySelectorAll("blockquote, p.en-line").forEach(function (el) {
+      if (el.querySelector(".speak-btn")) return;
+      var text = el.textContent.trim();
+      if (!text) return;
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "speak-btn";
+      btn.textContent = LABEL_PLAY;
+      btn.addEventListener("click", function () { speak(btn, text); });
+      el.appendChild(btn);
+    });
+  };
+  window.addEventListener("pagehide", function () { synth.cancel(); });
+}
+const READ_ALOUD_SCRIPT = `    ${installReadAloud.toString()}\n    installReadAloud();\n    if (window.addSpeakButtons) addSpeakButtons(document.getElementById("content"));`;
+
 installReaderPrefs();
+installReadAloud();
 document.getElementById("btnFontMinus").addEventListener("click", () => setFontSize(currentFontSize - 1));
 document.getElementById("btnFontPlus").addEventListener("click", () => setFontSize(currentFontSize + 1));
 
@@ -363,6 +415,14 @@ function buildStandaloneStaticHtml({ renderedBody, footerHtml, webPageTitle, dis
     margin-top: -12px; padding-left: 1.6em; text-align: left; color: var(--text-quote);
     font-family: Georgia, "Charter", "Times New Roman", serif; line-height: 1.7;
   }
+  .speak-btn {
+    display: inline-block; margin: 8px 0 0; padding: 1px 9px; cursor: pointer;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    font-size: 12px; line-height: 1.6; color: var(--text-muted); background: var(--bg-card);
+    border: 1px solid var(--border-color); border-radius: 4px;
+  }
+  .speak-btn:hover, .speak-btn.speaking { color: var(--text-main); border-color: var(--accent); }
+  p.en-line .speak-btn { margin: 0 0 0 8px; vertical-align: 1px; }
   ul, ol { padding-left: 22px; margin: 0 0 20px 0; }
   li { margin-bottom: 10px; }
   hr { border: none; border-top: 1px solid var(--border-color); margin: 28px 0; }
@@ -374,7 +434,7 @@ function buildStandaloneStaticHtml({ renderedBody, footerHtml, webPageTitle, dis
   #mode-zh:checked ~ .page-wrap main blockquote { display: none; }
   #mode-en:checked ~ .page-wrap main .bilingual-zh { display: none; }
   @media print {
-    .toolbar, .top-ribbon { display: none; }
+    .toolbar, .top-ribbon, .speak-btn { display: none; }
     .page-wrap { background: #fff; padding: 0; }
     .container { box-shadow: none; border: none; margin: 0; padding: 0; max-width: 100%; }
     .app-footer { margin-top: 32px; padding: 12px 0 0; max-width: 100%; border-top: 1px solid var(--border-color); }
@@ -416,6 +476,7 @@ ${renderedBody}
   </div>
   <script>
 ${READER_PREFS_SCRIPT}
+${READ_ALOUD_SCRIPT}
     function changeFontSize(delta) { setFontSize(currentFontSize + delta); }
   </script>
 </body>
@@ -784,6 +845,7 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
     pageHeading.textContent = parsedFinal.zhTitle;
     const finalHtmlFragment = renderArticleBody(parsedFinal.bodyMd);
     renderedContent.innerHTML = finalHtmlFragment;
+    if (window.addSpeakButtons) addSpeakButtons(renderedContent);
 
     const standaloneHtml = buildStandaloneStaticHtml({
       renderedBody: finalHtmlFragment,
