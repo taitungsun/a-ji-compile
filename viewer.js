@@ -162,9 +162,80 @@ function linkParaRefs(html, paraMap) {
   });
 }
 
+// 單字或片語條目的第一行「(1) **in honor of (someone)** …」：raw 是粗體原文，say 是要唸的部分
+function parseVocabHead(line) {
+  const m = line.match(/^[(（]\d+[)）]\s*\*\*([A-Za-z][A-Za-z '’.,/()-]*)\*\*/);
+  if (!m) return null;
+  return { raw: m[1].trim(), say: m[1].replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim() };
+}
+
+// 文章裡找單字的變化形：refine → refined、study → studies、stop → stopped（不規則變化找不到就算了）
+function vocabPattern(raw) {
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/['’]/g, "['’]");
+  const inflect = w => {
+    const lw = w.toLowerCase();
+    if (/[^aeiou]y$/.test(lw)) return `${esc(w.slice(0, -1))}(?:y|ies|ied|ying)`;
+    if (/e$/.test(lw)) return `${esc(w.slice(0, -1))}(?:e|es|ed|ing|er|ers)`;
+    const last = esc(w.slice(-1));
+    return `${esc(w)}(?:s|es|ed|ing|er|ers|ly|${last}ed|${last}ing)?`;
+  };
+  // (someone)、(something) 這類位置記號：中間的換成 1 到 4 個字，頭尾的直接去掉
+  const segs = raw.split(/\s*\([^)]*\)\s*/).map(s => s.trim()).filter(Boolean);
+  if (!segs.length) return null;
+  const segRe = segs.map((seg, i) => {
+    const words = seg.split(/\s+/);
+    return words.map((w, j) => (i === 0 && j === 0 ? inflect(w) : esc(w))).join("\\s+");
+  });
+  return new RegExp(`\\b${segRe.join("\\s+(?:[\\w’'-]+\\s+){1,4}?")}\\b`, "i");
+}
+
+// 從「重點單字與片語」區塊收集條目，給文章段落標示用；條目編號 w-1、w-2… 也是單字區的錨點
+function collectVocab(md) {
+  const lines = String(md || "").split(/\r?\n/);
+  const start = lines.findIndex(l => /^##\s.*重點單字/.test(l.trim()));
+  const items = [];
+  if (start >= 0) {
+    let inPhrases = false;
+    for (const l of lines.slice(start + 1)) {
+      const t = l.trim();
+      if (/^##\s/.test(t)) break;
+      if (/^###\s/.test(t)) { inPhrases = /片語/.test(t); continue; }
+      const head = parseVocabHead(t);
+      const re = head && vocabPattern(head.raw);
+      if (re) items.push({ say: head.say, re, phrase: inPhrases || /\s/.test(head.say), id: `w-${items.length + 1}` });
+    }
+  }
+  // 長的先標，片語裡的單字才不會先被搶走
+  items.sort((a, b) => b.say.length - a.say.length);
+  return { items, used: new Set(), idBySay: new Map(items.map(it => [it.say, it.id])) };
+}
+
+// 每個條目只標文章裡第一次出現的地方，點了跳到單字區
+function markVocab(html, vocab) {
+  for (const item of vocab.items) {
+    if (vocab.used.has(item.id)) continue;
+    const segs = html.split(/(<[^>]+>)/);
+    let inside = false;
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i];
+      if (s.startsWith("<a ")) { inside = true; continue; }
+      if (s === "</a>") { inside = false; continue; }
+      if (inside || s.startsWith("<")) continue;
+      const m = item.re.exec(s);
+      if (!m) continue;
+      segs[i] = `${s.slice(0, m.index)}<a class="vocab-link${item.phrase ? " phrase" : ""}" href="#${item.id}">${m[0]}</a>${s.slice(m.index + m[0].length)}`;
+      vocab.used.add(item.id);
+      html = segs.join("");
+      break;
+    }
+  }
+  return html;
+}
+
 // sourceParas：原文段落；遇到「[P3] 譯文」這種行，先放第 3 段原文，再放譯文
 // paraMap：原文段落編號 → 講義上顯示的段落編號
-function markdownToHtmlFragment(md, sourceParas = [], paraMap = new Map()) {
+// vocab：collectVocab 的結果，用來在原文標出重點單字
+function markdownToHtmlFragment(md, sourceParas = [], paraMap = new Map(), vocab = null) {
   const lines = String(md || "").split(/\r?\n/);
   let out = [];
   let inList = false;
@@ -174,6 +245,7 @@ function markdownToHtmlFragment(md, sourceParas = [], paraMap = new Map()) {
   let afterQuote = false;
   // 「(1) …」開頭的條目（單字、討論問題）底下緊接的幾行，排成縮排的附屬行
   let inEntry = false;
+  let inVocabSection = false;
 
   const flushQuote = () => {
     if (inQuote) {
@@ -236,7 +308,9 @@ function markdownToHtmlFragment(md, sourceParas = [], paraMap = new Map()) {
       if (/^[（(]?略[）)]?$/.test(refMatch[2])) continue; // 模型判斷不是內文（選單、廣告等）
       const k = paraMap.get(Number(refMatch[1]));
       const numAttrs = k ? ` id="p-${k}" data-n="${k}"` : "";
-      out.push(`<blockquote${numAttrs}><p>${escapeHtml(sourceParas[refMatch[1] - 1])}</p></blockquote>`);
+      let quoteHtml = escapeHtml(sourceParas[refMatch[1] - 1]);
+      if (vocab) quoteHtml = markVocab(quoteHtml, vocab);
+      out.push(`<blockquote${numAttrs}><p>${quoteHtml}</p></blockquote>`);
       if (refMatch[2]) {
         out.push(`<p class="bilingual-zh">${formatInline(refMatch[2])}</p>`);
         afterQuote = false;
@@ -266,6 +340,7 @@ function markdownToHtmlFragment(md, sourceParas = [], paraMap = new Map()) {
       let level = hMatch[1].length;
       if (level === 1) level = 2;
       const headingText = hMatch[2].replace(/[【】]/g, "");
+      if (level === 2) inVocabSection = /重點單字/.test(headingText);
       out.push(`<h${level}>${formatInline(formatHeadingSpacing(headingText))}</h${level}>`);
       afterQuote = false;
       inEntry = false;
@@ -311,9 +386,10 @@ function markdownToHtmlFragment(md, sourceParas = [], paraMap = new Map()) {
       out.push(`<p class="en-line${isEntryHead ? " en-head" : ""}" lang="en">${html}</p>`);
     } else if (isEntryHead) {
       // 單字或片語的第一行：「(1) **legend** [ˋlɛdʒənd] (n) 傳說」，旁邊放朗讀鈕唸這個字
-      const word = line.match(/^[(（]\d+[)）]\s*\*\*([A-Za-z][A-Za-z '’.,/()-]*)\*\*/);
-      const say = word ? word[1].replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim() : "";
-      out.push(say ? `<p class="vocab-head" data-say="${escapeHtml(say)}">${html}</p>` : `<p>${html}</p>`);
+      const say = parseVocabHead(line)?.say || "";
+      const id = inVocabSection && vocab ? vocab.idBySay.get(say) : "";
+      const idAttr = id ? ` id="${id}"` : "";
+      out.push(say ? `<p class="vocab-head"${idAttr} data-say="${escapeHtml(say)}">${html}</p>` : `<p>${html}</p>`);
     } else if (inEntry) {
       out.push(`<p class="sub-line">${html}</p>`);
     } else {
@@ -349,16 +425,17 @@ function renderArticleBody(md, sourceParas = []) {
     if (sourceParas[n - 1] === undefined || paraMap.has(n) || /^[（(]?略[）)]?$/.test(m[2].trim())) continue;
     paraMap.set(n, paraMap.size + 1);
   }
+  const vocab = collectVocab(md);
   const { guideMd, restMd } = splitGuide(md);
   const guideHtml = guideMd
     ? `<section class="guide">\n<h2>核心導讀</h2>\n${markdownToHtmlFragment(guideMd, [], paraMap)}\n</section>\n`
     : "";
-  // 補充說明與單字片語包成 .study-notes，「僅看中文」時只留譯文
+  // 補充說明、用法說明與單字片語包成 .study-notes，「僅看中文」時只留譯文
   const lines = String(restMd || "").split(/\r?\n/);
-  const notesStart = lines.findIndex(l => /^##\s+(?:\d+\.\s*)?(補充說明|重點單字)/.test(l.trim()));
-  if (notesStart < 0) return guideHtml + markdownToHtmlFragment(restMd, sourceParas, paraMap);
-  const articleHtml = markdownToHtmlFragment(lines.slice(0, notesStart).join("\n"), sourceParas, paraMap);
-  const notesHtml = markdownToHtmlFragment(lines.slice(notesStart).join("\n"), sourceParas, paraMap);
+  const notesStart = lines.findIndex(l => /^##\s+(?:\d+\.\s*)?(補充說明|用法說明|重點單字)/.test(l.trim()));
+  if (notesStart < 0) return guideHtml + markdownToHtmlFragment(restMd, sourceParas, paraMap, vocab);
+  const articleHtml = markdownToHtmlFragment(lines.slice(0, notesStart).join("\n"), sourceParas, paraMap, vocab);
+  const notesHtml = markdownToHtmlFragment(lines.slice(notesStart).join("\n"), sourceParas, paraMap, vocab);
   return `${guideHtml}${articleHtml}\n<section class="study-notes">\n${notesHtml}\n</section>`;
 }
 
@@ -498,6 +575,9 @@ function buildStandaloneStaticHtml({ renderedBody, footerHtml, webPageTitle, dis
     font-size: 12px; color: var(--text-muted);
   }
   a.para-ref { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+  a.vocab-link { color: inherit; font-weight: 700; text-decoration: none; }
+  a.vocab-link.phrase { background: linear-gradient(transparent 62%, rgba(234, 179, 8, 0.32) 62%); }
+  blockquote[id], p.vocab-head[id] { scroll-margin-top: 90px; }
   ul, ol { padding-left: 22px; margin: 0 0 20px 0; }
   li { margin-bottom: 10px; }
   hr { border: none; border-top: 1px solid var(--border-color); margin: 28px 0; }
@@ -579,7 +659,7 @@ const SYSTEM_INSTRUCTION = `【一、你的任務】
 
 【二、講義格式】
 只輸出講義本身（Markdown），開頭不要寒暄，結尾不要總結或詢問。
-第一行寫「# 中文大標題」：把使用者提供的原文標題譯成通順的台灣中文。接著依序寫下面四個區塊，區塊標題用 ## 開頭，一字不改照抄：
+第一行寫「# 中文大標題」：把使用者提供的原文標題譯成通順的台灣中文。接著依序寫下面五個區塊，區塊標題用 ## 開頭，一字不改照抄：
 ## 核心導讀
 用國、高中生聽得懂的話，一句話說明這篇文章在講什麼；再列出 3 個重點，以及讀懂本文需要的背景知識（沒有則省略）。
 最後寫「思考與討論：」，提出 2 個讓學生用英文回答的問題。問題用簡單的英文寫，每題三行，行與行之間不空行，題與題之間空一行：
@@ -590,7 +670,15 @@ const SYSTEM_INSTRUCTION = `【一、你的任務】
 文章的每一段前面都有段落編號，例如 [P1]、[P2]。依序翻譯每一段，不可省略、合併或拆開。每段譯文自成一行，開頭寫上和原文相同的編號，例如「[P1] 譯文」。不是文章內文的段落只寫「[P5] 略」（換成該段的編號），講義上就不會出現那一段，例如：網站選單、廣告、訂閱或分享提示、圖片來源或版權標示（Credit: Getty Images 這類）、文末的作者簡介與聯絡方式、相關文章連結。不要重抄英文原文，程式會自動把原文放在譯文上面。譯文要流暢，國、高中生讀得懂的台灣繁體中文。
 ## 2. 補充說明
 挑出文中 2 到 3 處學生可能看不懂的地方（文化背景、典故、慣用語、幽默或反諷、標題雙關語、重要的專業術語），用簡單易懂的方式說明。每一點自成一段，依序用 (1)、(2)、(3) 開頭。提到文中某一段時，寫那一段的編號，例如 [P8]，程式會換成講義上的段落號碼。只寫你確定的事：典故、字源沒有把握就不要寫，也不要說「英文常說……」，除非那真的是常見的說法；不確定時，就照文章前後文解釋意思。
-## 3. 重點單字與片語
+## 3. 用法說明
+從文章裡挑 1 個值得學的句型或文法用法（長文最多 2 個），例如 It's no wonder (that)…、倒裝的 Had I known…、not only… but also…。挑學生學了能自己用的，不要挑只有這篇文章才會出現的寫法。格式（各行之間不空行，兩個用法之間空一行）：
+(1) **It's no wonder (that) S + V** 難怪……
+It's no wonder America celebrates the sandwich.
+說明：用 2 到 4 句話講清楚意思、句子結構和使用時機，例如哪些字可以省略、口語和書面的差別。
+Ken got into his dream school. It's no wonder he's been so happy.
+肯考上了夢想中的學校，難怪他最近心情這麼好。
+第一行是句型和中文意思；第二行照抄文中用到這個句型的句子（太長可以只抄相關的部分）；第三行是說明；第四行自己寫一個新的簡短例句；第五行是例句的中文翻譯。
+## 4. 重點單字與片語
 分成「### 單字」和「### 片語」兩小段，各自從 (1) 開始編號。同一個條目的各行之間不空行，條目與條目之間空一行。
 挑選原則：挑國、高中生平常閱讀就會遇到、學了能再用的字，大約是高中 7000 單字第 3 到 6 級的程度。單字 6 到 8 個，片語 3 到 4 個。專業術語（例如 zero-day vulnerability）最多收 1 個，其他術語在譯文的括號或補充說明裡交代就好。
 單字的格式：
@@ -931,7 +1019,7 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
       for (let attempt = 1; cut && attempt <= MAX_CONTINUATIONS; attempt++) {
         statusBanner.textContent = `⏳ ${cutReason}，正在自動接續完成剩餘段落（第 ${attempt} 次）...`;
         const tail = fullMd.slice(-600);
-        const contPrompt = `${prompt}\n\n---\n【系統提示】：你剛才的輸出在以下文字處中斷：\n"""\n${tail}\n"""\n請緊接著上述中斷處之後，繼續往下輸出尚未完成的內容（切勿重複已輸出的段落），直到完成「3. ${FINAL_SECTION}」為止：`;
+        const contPrompt = `${prompt}\n\n---\n【系統提示】：你剛才的輸出在以下文字處中斷：\n"""\n${tail}\n"""\n請緊接著上述中斷處之後，繼續往下輸出尚未完成的內容（切勿重複已輸出的段落），直到完成「4. ${FINAL_SECTION}」為止：`;
         const lengthBefore = fullMd.length;
         try {
           const r = await runStream(contPrompt);
