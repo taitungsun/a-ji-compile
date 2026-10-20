@@ -441,9 +441,9 @@ function renderArticleBody(md, sourceParas = []) {
   const guideHtml = guideMd
     ? `<section class="guide">\n<h2>核心導讀</h2>\n${markdownToHtmlFragment(guideMd, [], paraMap)}\n</section>\n`
     : "";
-  // 補充說明、用法說明與單字片語包成 .study-notes，「僅看中文」時只留譯文
+  // 補充說明、文法句型與單字片語包成 .study-notes，「僅看中文」時只留譯文
   const lines = String(restMd || "").split(/\r?\n/);
-  const notesStart = lines.findIndex(l => /^##\s+(?:\d+\.\s*)?(補充說明|用法說明|重點單字)/.test(l.trim()));
+  const notesStart = lines.findIndex(l => /^##\s+(?:\d+\.\s*)?(補充說明|文法句型|用法說明|重點單字)/.test(l.trim()));
   if (notesStart < 0) return guideHtml + markdownToHtmlFragment(restMd, sourceParas, paraMap, vocab);
   const articleHtml = markdownToHtmlFragment(lines.slice(0, notesStart).join("\n"), sourceParas, paraMap, vocab);
   const notesHtml = markdownToHtmlFragment(lines.slice(notesStart).join("\n"), sourceParas, paraMap, vocab);
@@ -683,7 +683,7 @@ const SYSTEM_INSTRUCTION = `【一、你的任務】
 文章的每一段前面都有段落編號，例如 [P1]、[P2]。依序翻譯每一段，不可省略、合併或拆開。每段譯文自成一行，開頭寫上和原文相同的編號，例如「[P1] 譯文」。不是文章內文的段落只寫「[P5] 略」（換成該段的編號），講義上就不會出現那一段，例如：網站選單、廣告、訂閱或分享提示、圖片來源或版權標示（Credit: Getty Images 這類）、文末的作者簡介與聯絡方式、相關文章連結。不要重抄英文原文，程式會自動把原文放在譯文上面。譯文要流暢，國、高中生讀得懂的台灣繁體中文。
 ## 2. 補充說明
 挑出文中 2 到 3 處學生可能看不懂的地方（文化背景、典故、慣用語、幽默或反諷、標題雙關語、重要的專業術語），用簡單易懂的方式說明。每一點自成一段，依序用 (1)、(2)、(3) 開頭。提到文中某一段時，寫那一段的編號，例如 [P8]，程式會換成講義上的段落號碼。只寫你確定的事：典故、字源沒有把握就不要寫，也不要說「英文常說……」，除非那真的是常見的說法；不確定時，就照文章前後文解釋意思。
-## 3. 用法說明
+## 3. 文法句型
 從文章裡挑 1 個值得學的句型或文法用法（長文最多 2 個），例如 It's no wonder (that)…、倒裝的 Had I known…、not only… but also…。挑學生學了能自己用的，不要挑只有這篇文章才會出現的寫法。格式（各行之間不空行，兩個用法之間空一行）：
 (1) **It's no wonder (that) S + V** 難怪……
 It's no wonder America celebrates the sandwich.
