@@ -37,7 +37,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   compileTab(tab, info.selectionText || "");
 });
 
-// 快捷鍵（預設 Alt+J，可在 brave://extensions/shortcuts 修改）：與右鍵選單走同一條路徑
+// 快捷鍵（預設 Alt+J，可在 brave://extensions/shortcuts 或 Firefox 的 about:addons →「管理擴充套件快捷鍵」修改）：與右鍵選單走同一條路徑
 chrome.commands.onCommand.addListener(async (command, tab) => {
   if (command !== "compile-article") return;
   if (!tab?.id) [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
