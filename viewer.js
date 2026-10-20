@@ -353,7 +353,13 @@ function renderArticleBody(md, sourceParas = []) {
   const guideHtml = guideMd
     ? `<section class="guide">\n<h2>核心導讀</h2>\n${markdownToHtmlFragment(guideMd, [], paraMap)}\n</section>\n`
     : "";
-  return guideHtml + markdownToHtmlFragment(restMd, sourceParas, paraMap);
+  // 補充說明與單字片語包成 .study-notes，「僅看中文」時只留譯文
+  const lines = String(restMd || "").split(/\r?\n/);
+  const notesStart = lines.findIndex(l => /^##\s+(?:\d+\.\s*)?(補充說明|重點單字)/.test(l.trim()));
+  if (notesStart < 0) return guideHtml + markdownToHtmlFragment(restMd, sourceParas, paraMap);
+  const articleHtml = markdownToHtmlFragment(lines.slice(0, notesStart).join("\n"), sourceParas, paraMap);
+  const notesHtml = markdownToHtmlFragment(lines.slice(notesStart).join("\n"), sourceParas, paraMap);
+  return `${guideHtml}${articleHtml}\n<section class="study-notes">\n${notesHtml}\n</section>`;
 }
 
 // 頁尾：作者與編譯資訊（參考 SEAM 的頁尾）；viewer 與另存的 HTML 共用
@@ -500,7 +506,8 @@ function buildStandaloneStaticHtml({ renderedBody, footerHtml, webPageTitle, dis
   table { width: 100%; border-collapse: collapse; font-size: 0.92em; line-height: 1.6; }
   th, td { border: 1px solid var(--border-color); padding: 6px 10px; text-align: left; vertical-align: top; }
   th { background-color: var(--bg-quote); font-weight: 600; }
-  #mode-zh:checked ~ .page-wrap main blockquote { display: none; }
+  #mode-zh:checked ~ .page-wrap main blockquote,
+  #mode-zh:checked ~ .page-wrap main .study-notes { display: none; }
   #mode-en:checked ~ .page-wrap main .bilingual-zh { display: none; }
   @media print {
     .toolbar, .top-ribbon, .speak-btn { display: none; }
