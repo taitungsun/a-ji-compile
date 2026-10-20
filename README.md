@@ -85,7 +85,7 @@
 - 不需要伺服器，不收集任何資料。文章只會送到 Google Gemini API。
 - 權限用途：右鍵選單（contextMenus）、讀取目前分頁的文章（activeTab、scripting）、儲存設定（storage）、另存講義（downloads）。
 - 正文擷取使用 [Mozilla Readability](https://github.com/mozilla/readability)（Apache License 2.0，授權條款見 `lib/Readability.LICENSE.md`）。
-- 〔是否寫：部分設計構想參考 Shinkansen〕
+- 部分設計構想參考 [Shinkansen](https://github.com/jimmysu0309/shinkansen)（Jimmy Su），例如用 Readability 擷取正文、翻譯規則放在系統指令。程式碼與提示文字皆為本專案自行撰寫。
 
 ---
 
