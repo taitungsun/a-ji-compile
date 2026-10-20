@@ -150,10 +150,15 @@ function formatInline(str) {
 }
 
 // 筆記裡提到的 [P8] 換成講義上看得到的「第 k 段」連結（略過的段落不算號）
+// 前後是中文就不留空格（「文中第 2 段的」），是「(1)」這類非中文就留一個空格
 function linkParaRefs(html, paraMap) {
-  return html.replace(/\s*\[P(\d+)\]\s*/g, (m, n) => {
+  const isCjk = ch => /[　-鿿＀-￯]/.test(ch || "");
+  return html.replace(/(\s*)\[P(\d+)\](\s*)/g, (m, pre, n, post, offset, s) => {
     const k = paraMap.get(Number(n));
-    return k ? `<a class="para-ref" href="#p-${k}">第 ${k} 段</a>` : "";
+    if (!k) return pre && post ? " " : "";
+    const before = pre && s[offset - 1] && !isCjk(s[offset - 1]) ? " " : "";
+    const after = post && s[offset + m.length] && !isCjk(s[offset + m.length]) ? " " : "";
+    return `${before}<a class="para-ref" href="#p-${k}">第 ${k} 段</a>${after}`;
   });
 }
 
