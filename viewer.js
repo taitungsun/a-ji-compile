@@ -850,7 +850,10 @@ async function streamGemini(apiKey, model, prompt, onChunk, onUsage) {
     return;
   }
 
-  const sourceParas = splitParagraphs(job.articleText);
+  // 擷取到的內文開頭常重複一次標題，講義上已有中英標題，不必再翻一次
+  const normTitle = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const sourceParas = splitParagraphs(job.articleText)
+    .filter((p, i) => i > 2 || normTitle(p) !== normTitle(rawTitle));
   const prompt = buildPrompt(sourceParas, rawTitle);
   let fullMd = "";
 
