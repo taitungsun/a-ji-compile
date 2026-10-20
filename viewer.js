@@ -183,7 +183,7 @@ function vocabPattern(raw) {
   // (someone)、(something) 這類位置記號：中間的換成 1 到 4 個字，頭尾的直接去掉
   const segs = raw.split(/\s*\([^)]*\)\s*/).map(s => s.trim()).filter(Boolean);
   if (!segs.length) return null;
-  // 片語的第一個字和最後一個字（4 個字母以上）可以變化，a、an、the 可有可無：
+  // 片語的第一個字和最後一個字（3 個字母以上）可以變化，a、an、the 可有可無：
   // get a foothold 也能找到 get footholds
   const segRe = segs.map((seg, i) => {
     const words = seg.split(/\s+/);
@@ -191,7 +191,7 @@ function vocabPattern(raw) {
       const segEnd = j === words.length - 1;
       const isLast = i === segs.length - 1 && segEnd;
       if (/^(a|an|the)$/i.test(w) && !segEnd) return `(?:${w}\\s+)?`;
-      const re = (i === 0 && j === 0) || (isLast && j > 0 && w.length >= 4) ? inflect(w) : esc(w);
+      const re = (i === 0 && j === 0) || (isLast && j > 0 && w.length >= 3) ? inflect(w) : esc(w);
       return segEnd ? re : `${re}\\s+`;
     }).join("");
   });
@@ -315,11 +315,21 @@ function markdownToHtmlFragment(md, sourceParas = [], paraMap = new Map(), vocab
       flushList();
       inEntry = false;
       if (/^[（(]?略[）)]?$/.test(refMatch[2])) continue; // 模型判斷不是內文（選單、廣告等）
+      const src = sourceParas[refMatch[1] - 1];
+      const kind = paraKind(src);
+      if (kind === "heading") {
+        // 小標題：英文和中文排成一個段落標題，不編號、不放朗讀鈕
+        const zh = refMatch[2].replace(/^[（(]小標題[）)]\s*/, "");
+        out.push(`<h3 class="sub-heading"><span class="sh-en" lang="en">${escapeHtml(paraText(src))}</span>${zh ? `<span class="sh-zh">${formatInline(zh)}</span>` : ""}</h3>`);
+        afterQuote = false;
+        continue;
+      }
       const k = paraMap.get(Number(refMatch[1]));
       const numAttrs = k ? ` id="p-${k}" data-n="${k}"` : "";
-      let quoteHtml = escapeHtml(sourceParas[refMatch[1] - 1]);
+      const itemClass = kind === "item" ? ' class="list-item"' : "";
+      let quoteHtml = escapeHtml(paraText(src));
       if (vocab) quoteHtml = markVocab(quoteHtml, vocab);
-      out.push(`<blockquote${numAttrs}><p>${quoteHtml}</p></blockquote>`);
+      out.push(`<blockquote${itemClass}${numAttrs}><p>${quoteHtml}</p></blockquote>`);
       if (refMatch[2]) {
         out.push(`<p class="bilingual-zh">${formatInline(refMatch[2])}</p>`);
         afterQuote = false;
@@ -434,6 +444,7 @@ function renderArticleBody(md, sourceParas = []) {
   for (const m of String(md || "").matchAll(/^\s*\[P(\d+)\]\s*(.*)$/gm)) {
     const n = Number(m[1]);
     if (sourceParas[n - 1] === undefined || paraMap.has(n) || /^[（(]?略[）)]?$/.test(m[2].trim())) continue;
+    if (paraKind(sourceParas[n - 1]) === "heading") continue; // 小標題不編號
     paraMap.set(n, paraMap.size + 1);
   }
   const vocab = collectVocab(md);
@@ -586,6 +597,13 @@ function buildStandaloneStaticHtml({ renderedBody, footerHtml, webPageTitle, dis
     font-size: 12px; color: var(--text-muted);
   }
   a.para-ref { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+  h3.sub-heading { margin: 34px 0 6px; line-height: 1.45; }
+  h3.sub-heading .sh-en { display: block; font-family: Georgia, "Charter", "Times New Roman", serif; }
+  h3.sub-heading .sh-zh { display: block; font-size: 0.9em; color: var(--text-muted); font-weight: 600; }
+  #mode-zh:checked ~ .page-wrap main .sh-en,
+  #mode-en:checked ~ .page-wrap main .sh-zh { display: none; }
+  #mode-zh:checked ~ .page-wrap main h3.sub-heading .sh-zh { font-size: 1em; color: var(--text-main); }
+  blockquote.list-item p::before { content: "•"; margin-right: 0.5em; }
   a.vocab-link { color: inherit; font-weight: 700; text-decoration: none; }
   a.vocab-link.phrase { background: linear-gradient(transparent 62%, rgba(234, 179, 8, 0.32) 62%); }
   blockquote[id], p.vocab-head[id] { scroll-margin-top: 90px; }
@@ -680,7 +698,7 @@ const SYSTEM_INSTRUCTION = `【一、你的任務】
 你曾經待過只有一、兩個人一直在說話的小組嗎？
 試著這樣開頭：Yes, once in class, …
 ## 1. 全文雙語對照
-文章的每一段前面都有段落編號，例如 [P1]、[P2]。依序翻譯每一段，不可省略、合併或拆開。每段譯文自成一行，開頭寫上和原文相同的編號，例如「[P1] 譯文」。不是文章內文的段落只寫「[P5] 略」（換成該段的編號），講義上就不會出現那一段，例如：網站選單、廣告、訂閱或分享提示、圖片來源或版權標示（Credit: Getty Images 這類）、文末的作者簡介與聯絡方式、相關文章連結。不要重抄英文原文，程式會自動把原文放在譯文上面。譯文要流暢，國、高中生讀得懂的台灣繁體中文。
+文章的每一段前面都有段落編號，例如 [P1]、[P2]。依序翻譯每一段，不可省略、合併或拆開。每段譯文自成一行，開頭寫上和原文相同的編號，例如「[P1] 譯文」。編號後面標著「（小標題）」的是文章的小標題，譯成簡短的標題，不加句號，也不要寫出「（小標題）」這幾個字。原文缺字或句子不完整時，照原樣翻出來，不要自己補上原文沒有的內容。不是文章內文的段落只寫「[P5] 略」（換成該段的編號），講義上就不會出現那一段，例如：網站選單、廣告、訂閱或分享提示、圖片來源或版權標示（Credit: Getty Images 這類）、文末的作者簡介與聯絡方式、相關文章連結。不要重抄英文原文，程式會自動把原文放在譯文上面。譯文要流暢，國、高中生讀得懂的台灣繁體中文。
 ## 2. 補充說明
 挑出文中 2 到 3 處學生可能看不懂的地方（文化背景、典故、慣用語、幽默或反諷、標題雙關語、重要的專業術語），用簡單易懂的方式說明。每一點自成一段，依序用 (1)、(2)、(3) 開頭。提到文中某一段時，寫那一段的編號，例如 [P8]，程式會換成講義上的段落號碼。只寫你確定的事：典故、字源沒有把握就不要寫，也不要說「英文常說……」，除非那真的是常見的說法；不確定時，就照文章前後文解釋意思。
 ## 3. 文法句型
@@ -745,11 +763,22 @@ function splitParagraphs(articleText) {
     .filter(Boolean);
 }
 
+// 段落類型：擷取時小標題標「## 」、清單項目標「- 」；沒有標記的（例如反白選取的文字），
+// 短、沒有句末標點、大寫開頭的也當小標題
+function paraKind(p) {
+  if (/^##\s/.test(p)) return "heading";
+  if (/^-\s/.test(p)) return "item";
+  const words = p.split(/\s+/).length;
+  if (p.length <= 70 && words <= 10 && /^[A-Z0-9“"‘']/.test(p) && !/[.!?:;,"”’)\]]$/.test(p)) return "heading";
+  return "text";
+}
+const paraText = p => String(p || "").replace(/^(##|-)\s+/, "");
+
 function buildPrompt(paragraphs, rawTitle) {
   return `原文標題：${rawTitle}
 
 【以下為待編譯文章內容，每段前面是段落編號】：
-${paragraphs.map((p, i) => `[P${i + 1}] ${p}`).join("\n\n")}`;
+${paragraphs.map((p, i) => `[P${i + 1}] ${paraKind(p) === "heading" ? "（小標題）" : ""}${paraText(p)}`).join("\n\n")}`;
 }
 
 // 模型以版權為由中途改口拒絕時，譯文裡會出現這類句子

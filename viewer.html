@@ -235,6 +235,32 @@
     text-decoration: underline dotted;
     text-underline-offset: 3px;
   }
+  h3.sub-heading {
+    margin: 34px 0 6px;
+    line-height: 1.45;
+  }
+  h3.sub-heading .sh-en {
+    display: block;
+    font-family: Georgia, "Charter", "Times New Roman", serif;
+  }
+  h3.sub-heading .sh-zh {
+    display: block;
+    font-size: 0.9em;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  #mode-zh:checked ~ .page-wrap main .sh-en,
+  #mode-en:checked ~ .page-wrap main .sh-zh {
+    display: none;
+  }
+  #mode-zh:checked ~ .page-wrap main h3.sub-heading .sh-zh {
+    font-size: 1em;
+    color: var(--text-main);
+  }
+  blockquote.list-item p::before {
+    content: "•";
+    margin-right: 0.5em;
+  }
   a.vocab-link {
     color: inherit;
     font-weight: 700;

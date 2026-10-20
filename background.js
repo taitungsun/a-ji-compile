@@ -144,12 +144,15 @@ async function extractAndPrepareArticle(selectedTextFromMenu) {
   const blockSelector = "p, h2, h3, h4, li, blockquote";
 
   // 未經渲染的節點 innerText 會失去段落換行，因此逐一擷取區塊元素並以空行分隔
+  // 小標題前面加「## 」、清單項目加「- 」，講義端據此排版（送給模型前會拿掉）
   function blocksToText(root) {
     const blocks = [];
     root.querySelectorAll(blockSelector).forEach(el => {
       if (el.parentElement?.closest(blockSelector)) return; // 避免巢狀區塊重複擷取
       const text = (el.textContent || "").replace(/\s+/g, " ").trim();
-      if (text) blocks.push(text);
+      if (!text) return;
+      const tag = el.tagName.toLowerCase();
+      blocks.push(/^h[2-4]$/.test(tag) ? `## ${text}` : tag === "li" ? `- ${text}` : text);
     });
     return blocks.join("\n\n");
   }
