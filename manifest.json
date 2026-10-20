@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "阿吉編譯",
-  "version": "2.12.0",
+  "version": "2.12.1",
   "description": "在網頁按右鍵自動擷取文章正文，透過 Gemini API 編譯成台灣繁體中文雙語文章與學習筆記。",
   "icons": {
     "16": "icons/icon16.png",
