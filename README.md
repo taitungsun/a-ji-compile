@@ -44,7 +44,6 @@
 1. 到 [Releases](../../releases) 下載最新版的 zip 檔，解壓縮到一個固定的資料夾。之後不要搬動或刪除這個資料夾，否則擴充功能會失效。
 2. 在瀏覽器網址列輸入 `chrome://extensions`（Brave 為 `brave://extensions`，Edge 為 `edge://extensions`）。
 3. 打開右上角的「開發人員模式」，按「載入未封裝項目」，選擇剛才解壓縮的資料夾。
-4. 〔截圖〕
 
 ---
 
@@ -53,8 +52,6 @@
 1. 用 Google 帳號登入 [Google AI Studio](https://aistudio.google.com/apikey)。
 2. 按「Create API key」，複製產生的 key。
 3. 點瀏覽器右上角的阿吉編譯圖示，貼上 key 並儲存。
-
-〔免費額度大約可以編譯幾篇、用完時會看到什麼訊息〕
 
 注意：使用免費方案時，Google 可能會用送出的內容改進服務；付費方案不會。API key 只存在你自己的瀏覽器裡。
 
