@@ -39,6 +39,7 @@ function installReadAloud() {
   }
   function speak(btn, text) {
     var again = current === btn;
+    var busy = synth.speaking || synth.pending;
     synth.cancel();
     reset();
     if (again) return; // 再按一次 = 停止
@@ -47,8 +48,7 @@ function installReadAloud() {
     current = btn;
     btn.textContent = LABEL_STOP;
     btn.classList.add("speaking");
-    // Safari 在 cancel() 之後立刻 speak() 有時會沒聲音，稍等一下再開始
-    setTimeout(function () {
+    function start() {
       parts.forEach(function (s, i) {
         var u = new SpeechSynthesisUtterance(s.trim());
         u.lang = "en-US";
@@ -57,12 +57,15 @@ function installReadAloud() {
         u.onerror = function () { if (current === btn) reset(); };
         synth.speak(u);
       });
-    }, 60);
+    }
+    // iPhone Safari 只在按鈕的點擊當下允許發聲，所以平常直接唸；
+    // 只有正在唸別段時才稍等一下（Safari 在 cancel() 之後立刻 speak() 有時會沒聲音）
+    if (busy) setTimeout(start, 60); else start();
   }
   window.addSpeakButtons = function (root) {
-    (root || document).querySelectorAll("blockquote, p.en-line").forEach(function (el) {
+    (root || document).querySelectorAll("blockquote, p.en-line, p[data-say]").forEach(function (el) {
       if (el.querySelector(".speak-btn")) return;
-      var text = el.textContent.trim();
+      var text = (el.getAttribute("data-say") || el.textContent).replace(/^\s*[(（]\d+[)）]\s*/, "").trim();
       if (!text) return;
       var btn = document.createElement("button");
       btn.type = "button";
@@ -99,10 +102,9 @@ function formatSiteDisplayName(site) {
     .trim();
 }
 
+// \u53ea\u88dc\u4e2d\u82f1\u4e4b\u9593\u7684\u7a7a\u683c\uff1b\u4e0d\u62c6 OpenAI\u3001iPhone \u9019\u985e\u5927\u5c0f\u5beb\u6df7\u6392\u7684\u5b57\uff08\u7db2\u7ad9\u540d\u7a31\u53e6\u7531 formatSiteDisplayName \u8655\u7406\uff09
 function formatHeadingSpacing(str) {
   return String(str || "")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
     .replace(/([\u4e00-\u9fff])([A-Za-z0-9])/g, "$1 $2")
     .replace(/([A-Za-z0-9])([\u4e00-\u9fff])/g, "$1 $2")
     .replace(/\s+/g, " ")
@@ -142,11 +144,22 @@ function formatInline(str) {
   return escapeHtml(str)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/(?<!\*)\*([^*\r\n]+?)\*(?!\*)/g, "<em>$1</em>");
+    .replace(/(?<!\*)\*([^*\r\n]+?)\*(?!\*)/g, "<em>$1</em>")
+    // KK 音標，例如 [ˋlɛdʒənd]，改用音標字元齊全的字型
+    .replace(/\[([^\[\]<>]*[ˋˊˏæɑɔəɚɝʌʊɪɛθðʃʒŋ][^\[\]<>]*)\]/g, '<span class="kk">[$1]</span>');
+}
+
+// 筆記裡提到的 [P8] 換成講義上看得到的「第 k 段」連結（略過的段落不算號）
+function linkParaRefs(html, paraMap) {
+  return html.replace(/\s*\[P(\d+)\]\s*/g, (m, n) => {
+    const k = paraMap.get(Number(n));
+    return k ? `<a class="para-ref" href="#p-${k}">第 ${k} 段</a>` : "";
+  });
 }
 
 // sourceParas：原文段落；遇到「[P3] 譯文」這種行，先放第 3 段原文，再放譯文
-function markdownToHtmlFragment(md, sourceParas = []) {
+// paraMap：原文段落編號 → 講義上顯示的段落編號
+function markdownToHtmlFragment(md, sourceParas = [], paraMap = new Map()) {
   const lines = String(md || "").split(/\r?\n/);
   let out = [];
   let inList = false;
@@ -154,6 +167,8 @@ function markdownToHtmlFragment(md, sourceParas = []) {
   let inQuote = false;
   let quoteLines = [];
   let afterQuote = false;
+  // 「(1) …」開頭的條目（單字、討論問題）底下緊接的幾行，排成縮排的附屬行
+  let inEntry = false;
 
   const flushQuote = () => {
     if (inQuote) {
@@ -205,14 +220,18 @@ function markdownToHtmlFragment(md, sourceParas = []) {
     if (!line) {
       flushQuote();
       flushList();
+      inEntry = false;
       continue;
     }
     const refMatch = line.match(/^\[P(\d+)\]\s*(.*)$/);
     if (refMatch && sourceParas[refMatch[1] - 1] !== undefined) {
       flushQuote();
       flushList();
+      inEntry = false;
       if (/^[（(]?略[）)]?$/.test(refMatch[2])) continue; // 模型判斷不是內文（選單、廣告等）
-      out.push(`<blockquote><p>${escapeHtml(sourceParas[refMatch[1] - 1])}</p></blockquote>`);
+      const k = paraMap.get(Number(refMatch[1]));
+      const numAttrs = k ? ` id="p-${k}" data-n="${k}"` : "";
+      out.push(`<blockquote${numAttrs}><p>${escapeHtml(sourceParas[refMatch[1] - 1])}</p></blockquote>`);
       if (refMatch[2]) {
         out.push(`<p class="bilingual-zh">${formatInline(refMatch[2])}</p>`);
         afterQuote = false;
@@ -244,6 +263,7 @@ function markdownToHtmlFragment(md, sourceParas = []) {
       const headingText = hMatch[2].replace(/[【】]/g, "");
       out.push(`<h${level}>${formatInline(formatHeadingSpacing(headingText))}</h${level}>`);
       afterQuote = false;
+      inEntry = false;
       continue;
     }
 
@@ -255,7 +275,7 @@ function markdownToHtmlFragment(md, sourceParas = []) {
         inList = true;
         listTag = "ul";
       }
-      out.push(`  <li>${formatInline(ulMatch[1])}</li>`);
+      out.push(`  <li>${linkParaRefs(formatInline(ulMatch[1]), paraMap)}</li>`);
       afterQuote = false;
       continue;
     }
@@ -269,7 +289,7 @@ function markdownToHtmlFragment(md, sourceParas = []) {
         inList = true;
         listTag = "ol";
       }
-      out.push(`  <li value="${olMatch[1]}">${formatInline(olMatch[2])}</li>`);
+      out.push(`  <li value="${olMatch[1]}">${linkParaRefs(formatInline(olMatch[2]), paraMap)}</li>`);
       afterQuote = false;
       continue;
     }
@@ -277,14 +297,24 @@ function markdownToHtmlFragment(md, sourceParas = []) {
     flushList();
     // 不含中文的英文行（例如單字區的文中原句）改用英文字型，避免 ’ 被中文字型排成全形
     const isEnglishLine = !/[　-鿿＀-￯]/.test(line) && /[A-Za-z]/.test(line);
+    const isEntryHead = /^[(（]\d+[)）]\s*/.test(line);
+    const html = linkParaRefs(formatInline(line), paraMap);
     if (afterQuote) {
-      out.push(`<p class="bilingual-zh">${formatInline(line)}</p>`);
+      out.push(`<p class="bilingual-zh">${html}</p>`);
       afterQuote = false;
     } else if (isEnglishLine) {
-      out.push(`<p class="en-line" lang="en">${formatInline(line)}</p>`);
+      out.push(`<p class="en-line${isEntryHead ? " en-head" : ""}" lang="en">${html}</p>`);
+    } else if (isEntryHead) {
+      // 單字或片語的第一行：「(1) **legend** [ˋlɛdʒənd] (n) 傳說」，旁邊放朗讀鈕唸這個字
+      const word = line.match(/^[(（]\d+[)）]\s*\*\*([A-Za-z][A-Za-z '’.,/()-]*)\*\*/);
+      const say = word ? word[1].replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim() : "";
+      out.push(say ? `<p class="vocab-head" data-say="${escapeHtml(say)}">${html}</p>` : `<p>${html}</p>`);
+    } else if (inEntry) {
+      out.push(`<p class="sub-line">${html}</p>`);
     } else {
-      out.push(`<p>${formatInline(line)}</p>`);
+      out.push(`<p>${html}</p>`);
     }
+    if (isEntryHead) inEntry = true;
   }
   flushTable();
   flushQuote();
@@ -307,11 +337,18 @@ function splitGuide(md) {
 }
 
 function renderArticleBody(md, sourceParas = []) {
+  // 講義上的段落編號：照順序數有譯文的段落，「略」掉的不算
+  const paraMap = new Map();
+  for (const m of String(md || "").matchAll(/^\s*\[P(\d+)\]\s*(.*)$/gm)) {
+    const n = Number(m[1]);
+    if (sourceParas[n - 1] === undefined || paraMap.has(n) || /^[（(]?略[）)]?$/.test(m[2].trim())) continue;
+    paraMap.set(n, paraMap.size + 1);
+  }
   const { guideMd, restMd } = splitGuide(md);
   const guideHtml = guideMd
-    ? `<section class="guide">\n<h2>核心導讀</h2>\n${markdownToHtmlFragment(guideMd)}\n</section>\n`
+    ? `<section class="guide">\n<h2>核心導讀</h2>\n${markdownToHtmlFragment(guideMd, [], paraMap)}\n</section>\n`
     : "";
-  return guideHtml + markdownToHtmlFragment(restMd, sourceParas);
+  return guideHtml + markdownToHtmlFragment(restMd, sourceParas, paraMap);
 }
 
 // 頁尾：作者與編譯資訊（參考 SEAM 的頁尾）；viewer 與另存的 HTML 共用
@@ -437,7 +474,19 @@ function buildStandaloneStaticHtml({ renderedBody, footerHtml, webPageTitle, dis
     border: 1px solid var(--border-color); border-radius: 4px;
   }
   .speak-btn:hover, .speak-btn.speaking { color: var(--text-main); border-color: var(--accent); }
-  p.en-line .speak-btn { margin: 0 0 0 8px; vertical-align: 1px; }
+  p.en-line .speak-btn, p.vocab-head .speak-btn { margin: 0 0 0 8px; vertical-align: 1px; }
+  p.en-line.en-head { margin-top: 0; padding-left: 0; }
+  p.sub-line { margin-top: -12px; padding-left: 1.6em; text-align: left; }
+  .kk {
+    font-family: "Lucida Sans Unicode", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.92em; color: var(--text-muted); white-space: nowrap;
+  }
+  blockquote[data-n]::before {
+    content: attr(data-n); float: right; margin: -6px -8px 0 12px;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    font-size: 12px; color: var(--text-muted);
+  }
+  a.para-ref { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
   ul, ol { padding-left: 22px; margin: 0 0 20px 0; }
   li { margin-bottom: 10px; }
   hr { border: none; border-top: 1px solid var(--border-color); margin: 28px 0; }
@@ -520,13 +569,31 @@ const SYSTEM_INSTRUCTION = `【一、你的任務】
 只輸出講義本身（Markdown），開頭不要寒暄，結尾不要總結或詢問。
 第一行寫「# 中文大標題」：把使用者提供的原文標題譯成通順的台灣中文。接著依序寫下面四個區塊，區塊標題用 ## 開頭，一字不改照抄：
 ## 核心導讀
-用國、高中生聽得懂的話，一句話說明這篇文章在講什麼；再列出 3 個重點，以及讀懂本文需要的背景知識（沒有則省略）；最後提出 2 個可以讓學生思考或討論的問題。
+用國、高中生聽得懂的話，一句話說明這篇文章在講什麼；再列出 3 個重點，以及讀懂本文需要的背景知識（沒有則省略）。
+最後寫「思考與討論：」，提出 2 個讓學生用英文回答的問題。問題用簡單的英文寫，每題三行，行與行之間不空行，題與題之間空一行：
+(1) Have you ever been in a group where only one or two people did all the talking?
+你曾經待過只有一、兩個人一直在說話的小組嗎？
+試著這樣開頭：Yes, once in class, …
 ## 1. 全文雙語對照
-文章的每一段前面都有段落編號，例如 [P1]、[P2]。依序翻譯每一段，不可省略、合併或拆開。每段譯文自成一行，開頭寫上和原文相同的編號，例如「[P1] 譯文」。混進文章裡的網站選單、廣告、訂閱或分享提示這類不是內文的段落，只寫「[P5] 略」（換成該段的編號），講義上就不會出現那一段。不要重抄英文原文，程式會自動把原文放在譯文上面。譯文要流暢，國、高中生讀得懂的台灣繁體中文。
+文章的每一段前面都有段落編號，例如 [P1]、[P2]。依序翻譯每一段，不可省略、合併或拆開。每段譯文自成一行，開頭寫上和原文相同的編號，例如「[P1] 譯文」。不是文章內文的段落只寫「[P5] 略」（換成該段的編號），講義上就不會出現那一段，例如：網站選單、廣告、訂閱或分享提示、圖片來源或版權標示（Credit: Getty Images 這類）、文末的作者簡介與聯絡方式、相關文章連結。不要重抄英文原文，程式會自動把原文放在譯文上面。譯文要流暢，國、高中生讀得懂的台灣繁體中文。
 ## 2. 補充說明
-挑出文中 2 到 3 處學生可能看不懂的地方（文化背景、典故、慣用語、幽默或反諷、標題雙關語），用簡單易懂的方式說明。每一點自成一段，依序用 (1)、(2)、(3) 開頭。
+挑出文中 2 到 3 處學生可能看不懂的地方（文化背景、典故、慣用語、幽默或反諷、標題雙關語、重要的專業術語），用簡單易懂的方式說明。每一點自成一段，依序用 (1)、(2)、(3) 開頭。提到文中某一段時，寫那一段的編號，例如 [P8]，程式會換成講義上的段落號碼。只寫你確定的事：典故、字源沒有把握就不要寫，也不要說「英文常說……」，除非那真的是常見的說法；不確定時，就照文章前後文解釋意思。
 ## 3. 重點單字與片語
-整理 8 到 10 個值得國、高中生學習的單字或片語（可含 1 到 2 個較進階的字）。每個單字自成一段，依序用 (1)、(2)、(3)…開頭，格式為「(1) **單字**（詞性）中文解釋」，下一行寫出文中原句（直接寫，不用 > 引用格式）。
+分成「### 單字」和「### 片語」兩小段，各自從 (1) 開始編號。同一個條目的各行之間不空行，條目與條目之間空一行。
+挑選原則：挑國、高中生平常閱讀就會遇到、學了能再用的字，大約是高中 7000 單字第 3 到 6 級的程度。單字 6 到 8 個，片語 3 到 4 個。專業術語（例如 zero-day vulnerability）最多收 1 個，其他術語在譯文的括號或補充說明裡交代就好。
+單字的格式：
+(1) **legend** [ˋlɛdʒənd] (n) 傳說
+There's a **legend** about an old woman who lived in these mountains.
+這座山裡流傳著一個關於老婆婆的傳說。
+同字族：legendary (adj) 傳奇的
+第一行是單字、KK 音標、詞性和中文解釋。KK 音標寫在 [ ] 裡，主重音用 ˋ、次重音用 ˏ，標在該音節前面，例如 legendary [ˋlɛdʒənˏdɛrɪ]。詞性寫 (n)、(v)、(adj)、(adv)、(prep)、(conj)。
+第二行自己寫一個新的英文例句：簡短（15 個字以內），用國、高中生熟悉的生活情境，不要照抄文章的句子；例句裡的這個字用 ** ** 標粗。
+第三行是例句的中文翻譯。
+第四行「同字族」只在這個字有常用的衍生字時才寫，最多 2 個，沒有就省略這一行。
+片語的格式（不寫音標和詞性；片語中間或後面要接人或事物時，用 (someone) 或 (something) 標出位置）：
+(1) **in honor of (someone or something)** 為了紀念、向……致敬
+I wrote this song **in honor of** my grandmother.
+我寫這首歌來紀念我的奶奶。
 整份講義都不要提到學測、大考或「考試常出現」之類的考試提醒，學習不只是為了考試。
 
 【三、怎麼翻譯】

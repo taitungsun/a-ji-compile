@@ -202,9 +202,38 @@
     color: var(--text-main);
     border-color: var(--accent);
   }
-  p.en-line .speak-btn {
+  p.en-line .speak-btn,
+  p.vocab-head .speak-btn {
     margin: 0 0 0 8px;
     vertical-align: 1px;
+  }
+  p.en-line.en-head {
+    margin-top: 0;
+    padding-left: 0;
+  }
+  p.sub-line {
+    margin-top: -12px;
+    padding-left: 1.6em;
+    text-align: left;
+  }
+  .kk {
+    font-family: "Lucida Sans Unicode", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.92em;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  blockquote[data-n]::before {
+    content: attr(data-n);
+    float: right;
+    margin: -6px -8px 0 12px;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  a.para-ref {
+    color: inherit;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
   }
   h1 {
     font-size: 1.55em;
