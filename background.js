@@ -154,6 +154,26 @@ async function extractAndPrepareArticle(selectedTextFromMenu) {
     return blocks.join("\n\n");
   }
 
+  // 有些網站（例如 Ars Technica）把正文拆成好幾個同樣 class 的區塊，中間夾廣告，
+  // Readability 只會拿到第一塊。從它抽到的第一段找回所在區塊，把同 class 的區塊依序接起來。
+  function mergeSplitBody(readableText) {
+    const firstPara = readableText.split("\n\n").find(p => p.length > 80);
+    if (!firstPara) return "";
+    const probe = firstPara.slice(0, 60);
+    const para = [...document.querySelectorAll("p")]
+      .find(el => (el.textContent || "").replace(/\s+/g, " ").includes(probe));
+    const block = para?.parentElement;
+    if (!block || !block.classList.length) return "";
+    const sel = block.tagName.toLowerCase() + [...block.classList].map(c => `.${CSS.escape(c)}`).join("");
+    const blocks = [...document.querySelectorAll(sel)].filter(el => !el.parentElement?.closest(sel));
+    if (blocks.length < 2) return "";
+    return blocks.map(el => {
+      const clone = el.cloneNode(true);
+      clone.querySelectorAll("script, style, aside, figure, button").forEach(n => n.remove());
+      return blocksToText(clone);
+    }).filter(Boolean).join("\n\n");
+  }
+
   // Mozilla Readability 抽正文；失敗或抽得太短回傳空字串，交給舊的選擇器做法
   function extractWithReadability() {
     if (typeof Readability !== "function") return "";
@@ -166,7 +186,10 @@ async function extractAndPrepareArticle(selectedTextFromMenu) {
       // 用 DOMParser 解析成惰性文件，避免 innerHTML 觸發 <img onerror> 之類的屬性
       const parsedDoc = new DOMParser().parseFromString(parsed.content, "text/html");
       const joined = blocksToText(parsedDoc.body);
-      if (joined.length > 200) return joined;
+      if (joined.length > 200) {
+        const merged = mergeSplitBody(joined);
+        return merged.length > joined.length * 1.1 ? merged : joined;
+      }
       const plain = (parsed.textContent || "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim();
       return plain.length > 200 ? plain : "";
     } catch (_) {

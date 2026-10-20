@@ -146,7 +146,8 @@ function formatInline(str) {
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/(?<!\*)\*([^*\r\n]+?)\*(?!\*)/g, "<em>$1</em>")
     // KK 音標，例如 [ˋlɛdʒənd]，改用音標字元齊全的字型
-    .replace(/\[([^\[\]<>]*[ˋˊˏæɑɔəɚɝʌʊɪɛθðʃʒŋ][^\[\]<>]*)\]/g, '<span class="kk">[$1]</span>');
+    // 模型有時照 KK 字型的打法把成音節的 l 寫成「!」，換回 l
+    .replace(/\[([^\[\]<>]*[ˋˊˏæɑɔəɚɝʌʊɪɛθðʃʒŋ][^\[\]<>]*)\]/g, (m, kk) => `<span class="kk">[${kk.replace(/!/g, "l")}]</span>`);
 }
 
 // 筆記裡提到的 [P8] 換成講義上看得到的「第 k 段」連結（略過的段落不算號）
@@ -182,9 +183,17 @@ function vocabPattern(raw) {
   // (someone)、(something) 這類位置記號：中間的換成 1 到 4 個字，頭尾的直接去掉
   const segs = raw.split(/\s*\([^)]*\)\s*/).map(s => s.trim()).filter(Boolean);
   if (!segs.length) return null;
+  // 片語的第一個字和最後一個字（4 個字母以上）可以變化，a、an、the 可有可無：
+  // get a foothold 也能找到 get footholds
   const segRe = segs.map((seg, i) => {
     const words = seg.split(/\s+/);
-    return words.map((w, j) => (i === 0 && j === 0 ? inflect(w) : esc(w))).join("\\s+");
+    return words.map((w, j) => {
+      const segEnd = j === words.length - 1;
+      const isLast = i === segs.length - 1 && segEnd;
+      if (/^(a|an|the)$/i.test(w) && !segEnd) return `(?:${w}\\s+)?`;
+      const re = (i === 0 && j === 0) || (isLast && j > 0 && w.length >= 4) ? inflect(w) : esc(w);
+      return segEnd ? re : `${re}\\s+`;
+    }).join("");
   });
   return new RegExp(`\\b${segRe.join("\\s+(?:[\\w’'-]+\\s+){1,4}?")}\\b`, "i");
 }
@@ -341,7 +350,9 @@ function markdownToHtmlFragment(md, sourceParas = [], paraMap = new Map(), vocab
       if (level === 1) level = 2;
       const headingText = hMatch[2].replace(/[【】]/g, "");
       if (level === 2) inVocabSection = /重點單字/.test(headingText);
-      out.push(`<h${level}>${formatInline(formatHeadingSpacing(headingText))}</h${level}>`);
+      // 「全文雙語對照」標題只在雙語模式顯示，僅看中文或英文時藏起來
+      const headingClass = /全文雙語對照/.test(headingText) ? ' class="bilingual-heading"' : "";
+      out.push(`<h${level}${headingClass}>${formatInline(formatHeadingSpacing(headingText))}</h${level}>`);
       afterQuote = false;
       inEntry = false;
       continue;
@@ -587,7 +598,9 @@ function buildStandaloneStaticHtml({ renderedBody, footerHtml, webPageTitle, dis
   th, td { border: 1px solid var(--border-color); padding: 6px 10px; text-align: left; vertical-align: top; }
   th { background-color: var(--bg-quote); font-weight: 600; }
   #mode-zh:checked ~ .page-wrap main blockquote,
-  #mode-zh:checked ~ .page-wrap main .study-notes { display: none; }
+  #mode-zh:checked ~ .page-wrap main .study-notes,
+  #mode-zh:checked ~ .page-wrap main .bilingual-heading,
+  #mode-en:checked ~ .page-wrap main .bilingual-heading { display: none; }
   #mode-en:checked ~ .page-wrap main .bilingual-zh { display: none; }
   @media print {
     .toolbar, .top-ribbon, .speak-btn { display: none; }
@@ -685,11 +698,12 @@ Ken got into his dream school. It's no wonder he's been so happy.
 (1) **legend** [ˋlɛdʒənd] (n) 傳說
 There's a **legend** about an old woman who lived in these mountains.
 這座山裡流傳著一個關於老婆婆的傳說。
-同字族：legendary (adj) 傳奇的
-第一行是單字、KK 音標、詞性和中文解釋。KK 音標寫在 [ ] 裡，主重音用 ˋ、次重音用 ˏ，標在該音節前面，例如 legendary [ˋlɛdʒənˏdɛrɪ]。詞性寫 (n)、(v)、(adj)、(adv)、(prep)、(conj)。
+衍生字：legendary (adj) 傳奇的
+同義字：myth (n) 神話
+第一行是單字、KK 音標、詞性和中文解釋。KK 音標寫在 [ ] 裡，主重音用 ˋ、次重音用 ˏ，標在該音節前面，例如 legendary [ˋlɛdʒənˏdɛrɪ]。成音節的 l、n 直接寫 l、n，例如 clinical [ˋklɪnɪkl]，不要用 ! 或其他符號代替。詞性寫 (n)、(v)、(adj)、(adv)、(prep)、(conj)。
 第二行自己寫一個新的英文例句：簡短（15 個字以內），用國、高中生熟悉的生活情境，不要照抄文章的句子；例句裡的這個字用 ** ** 標粗。
 第三行是例句的中文翻譯。
-第四行「同字族」只在這個字有常用的衍生字時才寫，最多 2 個，沒有就省略這一行。
+最後可以再加「衍生字」「同義字」「反義字」各一行，但只寫真的常用、意思也確實相符的字，每行最多 2 個；沒有適合的就省略那一行，寧缺勿濫。
 片語的格式（不寫音標和詞性；片語中間或後面要接人或事物時，用 (someone) 或 (something) 標出位置）：
 (1) **in honor of (someone or something)** 為了紀念、向……致敬
 I wrote this song **in honor of** my grandmother.
