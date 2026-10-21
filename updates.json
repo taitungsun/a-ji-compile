@@ -1,0 +1,13 @@
+{
+  "addons": {
+    "a-ji-compile@taitungsun": {
+      "updates": [
+        {
+          "version": "2.12.2",
+          "update_link": "https://github.com/taitungsun/a-ji-compile/releases/download/v2.12.2/a-ji-compile-firefox-v2.12.2.xpi",
+          "update_hash": "sha256:481aa7652d4a9e00139b6203e1b16fdccbe4b982186cc59001893476313d367e"
+        }
+      ]
+    }
+  }
+}
