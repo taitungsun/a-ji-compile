@@ -4,7 +4,7 @@
 
 [![Version](https://img.shields.io/badge/version-2.12-blue)](../../releases/latest)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey)](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hant)
-[![Platform](https://img.shields.io/badge/Platform-Chrome%20%7C%20Brave%20%7C%20Edge-blue)](#技術說明)
+[![Platform](https://img.shields.io/badge/Platform-Chrome%20%7C%20Brave%20%7C%20Edge%20%7C%20Firefox-blue)](#技術說明)
 [![Ko-fi](https://img.shields.io/badge/Support-Ko--fi-FF5E5B?logo=ko-fi)](https://ko-fi.com/izensun)
 
 阿吉編譯是一個瀏覽器擴充功能。在英文文章頁面按右鍵，就會把文章做成一份給國、高中生閱讀的中英雙語講義，用的是台灣的用語和中文排版。翻譯與筆記由 Google Gemini 產生，需要自己的 Gemini API key。
@@ -41,9 +41,21 @@
 
 ## 安裝
 
-1. 到 [Releases](../../releases) 下載最新版的 zip 檔，解壓縮到一個固定的資料夾。之後不要搬動或刪除這個資料夾，否則擴充功能會失效。
+### Chrome、Brave、Edge
+
+1. 到 [Releases](../../releases) 下載最新版的 `a-ji-compile-v版本.zip`，解壓縮到一個固定的資料夾。之後不要搬動或刪除這個資料夾，否則擴充功能會失效。
 2. 在瀏覽器網址列輸入 `chrome://extensions`（Brave 為 `brave://extensions`，Edge 為 `edge://extensions`）。
 3. 打開右上角的「開發人員模式」，按「載入未封裝項目」，選擇剛才解壓縮的資料夾。
+
+### Firefox
+
+需要 Firefox 140 以上（LibreWolf 等以 Firefox 為基礎的瀏覽器也可以）。
+
+1. 到 [Releases](../../releases) 下載最新版的 `a-ji-compile-firefox-v版本.xpi`。
+2. 把檔案拖進 Firefox 視窗，或在網址列輸入 `about:addons`，按齒輪選「從檔案安裝附加元件」。
+3. 出現權限詢問時按「新增」。
+
+Firefox 版經過 Mozilla 簽署，但沒有上架附加元件商店，不會自動更新。有新版本時，請重新下載安裝。
 
 ---
 
@@ -62,6 +74,8 @@
 1. 打開一篇英文文章。
 2. 在頁面上按右鍵，選「編譯成中英雙語講義」，或按 Alt+J。
 3. 會開啟新分頁顯示編譯進度，完成後自動存到「下載／阿吉編譯」資料夾。
+
+快捷鍵可以在 `brave://extensions/shortcuts`（Chrome 為 `chrome://extensions/shortcuts`），或 Firefox 的 `about:addons` →齒輪→「管理擴充套件快捷鍵」修改。
 
 在圖示的設定頁可以選擇模型、儲存資料夾，以及是否自動下載。
 
