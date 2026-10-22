@@ -8,6 +8,11 @@ Firefox 版靠 updates.json 自動更新。拿到 AMO 簽署好的 xpi 後執行
 python tools/build.py --update-json <簽署好的.xpi>
 會在 updates.json 加入這一版（含 sha256），把 xpi 放上 release 後再 commit、push。
 
+上架商店用：python tools/build.py --store
+另外產出 dist/a-ji-compile-chrome-store-v{版本}.zip（Chrome 線上應用程式商店，
+manifest.json 在 zip 根目錄）與 dist/a-ji-compile-firefox-listed-v{版本}.zip
+（AMO 公開上架，「On this site」，不含 update_url，改由 AMO 代管更新）。
+
 兩版共用同一份程式碼，只有 manifest 不同：Firefox 不支援 background.service_worker，
 改用 background.scripts（事件頁），另外需要 gecko id 與資料收集聲明。
 """
@@ -26,7 +31,7 @@ GECKO_ID = "a-ji-compile@taitungsun"
 
 # 不放進安裝包的檔案（說明文件、截圖、打包腳本）
 EXCLUDE_PREFIXES = ("docs/", "tools/", "dist/", ".git")
-EXCLUDE_NAMES = {"README.md"}
+EXCLUDE_NAMES = {"README.md", "updates.json"}
 
 FIREFOX_SETTINGS = {
     "gecko": {
@@ -52,10 +57,14 @@ def tracked_files():
         yield name
 
 
-def firefox_manifest(manifest):
+def firefox_manifest(manifest, listed=False):
     m = dict(manifest)
     m["background"] = {"scripts": [manifest["background"]["service_worker"]]}
-    m["browser_specific_settings"] = FIREFOX_SETTINGS
+    gecko = dict(FIREFOX_SETTINGS["gecko"])
+    if listed:
+        # AMO 公開上架的版本不能自帶 update_url
+        del gecko["update_url"]
+    m["browser_specific_settings"] = {"gecko": gecko}
     return m
 
 
@@ -93,6 +102,9 @@ def add_update_entry(xpi):
 def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--update-json":
         return add_update_entry(sys.argv[2])
+    store = sys.argv[1:] == ["--store"]
+    if sys.argv[1:] and not store:
+        sys.exit(__doc__)
     manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
     version = manifest["version"]
     DIST.mkdir(exist_ok=True)
@@ -100,6 +112,12 @@ def main():
     write_zip(DIST / f"a-ji-compile-v{version}.zip", manifest, prefix="a-ji-compile/")
     # Firefox 版 manifest.json 必須在 zip 根目錄
     write_zip(DIST / f"a-ji-compile-firefox-v{version}.zip", firefox_manifest(manifest))
+    if store:
+        write_zip(DIST / f"a-ji-compile-chrome-store-v{version}.zip", manifest)
+        write_zip(
+            DIST / f"a-ji-compile-firefox-listed-v{version}.zip",
+            firefox_manifest(manifest, listed=True),
+        )
 
 
 if __name__ == "__main__":
