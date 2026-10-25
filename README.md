@@ -43,6 +43,10 @@
 
 ### Chrome、Brave、Edge
 
+從 [Chrome 線上應用程式商店](https://chromewebstore.google.com/detail/%E9%98%BF%E5%90%89%E7%B7%A8%E8%AD%AF/cbfagnapglgabljmaeginnoeafpfhlkn) 安裝，之後會自動更新。
+
+也可以手動安裝（不會自動更新）：
+
 1. 到 [Releases](../../releases) 下載最新版的 `a-ji-compile-v版本.zip`，解壓縮到一個固定的資料夾。之後不要搬動或刪除這個資料夾，否則擴充功能會失效。
 2. 在瀏覽器網址列輸入 `chrome://extensions`（Brave 為 `brave://extensions`，Edge 為 `edge://extensions`）。
 3. 打開右上角的「開發人員模式」，按「載入未封裝項目」，選擇剛才解壓縮的資料夾。
