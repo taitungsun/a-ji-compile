@@ -55,11 +55,15 @@
 
 需要 Firefox 140 以上（LibreWolf 等以 Firefox 為基礎的瀏覽器也可以）。
 
+從 [Firefox 附加元件](https://addons.mozilla.org/addon/%E9%98%BF%E5%90%89%E7%B7%A8%E8%AD%AF/) 安裝，之後會自動更新。
+
+也可以從 Releases 安裝經 Mozilla 簽署的檔案：
+
 1. 到 [Releases](../../releases) 下載最新版的 `a-ji-compile-firefox-v版本.xpi`。
 2. 把檔案拖進 Firefox 視窗，或在網址列輸入 `about:addons`，按齒輪選「從檔案安裝附加元件」。
 3. 出現權限詢問時按「新增」。
 
-Firefox 版經過 Mozilla 簽署，但沒有上架附加元件商店。2.12.2 起會自動更新；如果裝的是 2.12.1，請手動安裝一次新版。
+從 Releases 安裝的版本 2.12.2 起也會自動更新；如果裝的是 2.12.1，請手動安裝一次新版。
 
 ---
 
