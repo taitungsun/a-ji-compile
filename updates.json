@@ -6,6 +6,11 @@
           "version": "2.12.2",
           "update_link": "https://github.com/taitungsun/a-ji-compile/releases/download/v2.12.2/a-ji-compile-firefox-v2.12.2.xpi",
           "update_hash": "sha256:481aa7652d4a9e00139b6203e1b16fdccbe4b982186cc59001893476313d367e"
+        },
+        {
+          "version": "2.12.3",
+          "update_link": "https://github.com/taitungsun/a-ji-compile/releases/download/v2.12.3/a-ji-compile-firefox-v2.12.3.xpi",
+          "update_hash": "sha256:504655ca9e0a80d30668af4c31a8c0a724420e3db83a92e6315ecda75396729f"
         }
       ]
     }
